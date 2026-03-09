@@ -1,6 +1,6 @@
 /*
  * TIME32 — LED Часы на ESP8266 (NodeMCU ESP-12E)
- * Версия: b11
+ * Версия: b12
  * 
  * Режимы отображения (чередование):
  *   0: Только часы
@@ -379,7 +379,7 @@ bool displayScrolling(ParsedChar* chars, int count, int totalW, int &pos) {
     if (gi <= -100) drawDigit(-(gi+100), sx, yOff, color);
     else drawGlyph(gi, sx, yOff, color);
   }
-  return (pos > totalW + MATRIX_WIDTH);
+  return (pos > totalW + 2);  // +2 небольшой отступ после последнего символа
 }
 
 
@@ -622,9 +622,6 @@ void handleRoot() {
   h+="<div class='s' style='display:"+String(displayMode==2?"block":"none")+"'>";
   h+="<h2>Фраза</h2><form action='/text' method='post'>";
   h+="<textarea name='scrollText' rows='2' maxlength='255'>"+String(scrollText)+"</textarea>";
-  h+="<div class='spw'><span>Скорость:</span>";
-  h+="<input type='range' name='speed' min='50' max='400' value='"+String(scrollSpeed)+"' oninput='this.nextElementSibling.textContent=this.value'>";
-  h+="<span>"+String(scrollSpeed)+"</span><span>мс</span></div>";
   h+="<button type='submit' class='sb'>Применить</button></form></div>";
 
   // Погода (видна в режимах 1 и 2)
@@ -654,6 +651,13 @@ void handleRoot() {
   h+="<div class='s'><h2>Яркость</h2><div class='sw'>";
   h+="<input type='range' min='5' max='255' value='"+String(brightness)+"' oninput='document.getElementById(\"bv\").textContent=this.value' onchange='fetch(\"/brightness?value=\"+this.value)'>";
   h+="<span class='sv' id='bv'>"+String(brightness)+"</span></div></div>";
+
+  // Скорость прокрутки (влияет на погоду и фразу)
+  h+="<div class='s'><h2>Скорость прокрутки</h2><div class='sw'>";
+  h+="<span>Быстро</span>";
+  h+="<input type='range' min='50' max='400' value='"+String(scrollSpeed)+"' oninput='document.getElementById(\"spv\").textContent=this.value+\"мс\"' onchange='fetch(\"/speed?value=\"+this.value)'>";
+  h+="<span>Медленно</span>";
+  h+="</div><p style='text-align:center;margin-top:6px'><span class='sv' id='spv'>"+String(scrollSpeed)+"мс</span></p></div>";
 
   // Цвета
   h+="<div class='s' style='display:"+String(effectMode==4?"block":"none")+"'><h2>Цвет</h2><div class='cg'>";
@@ -702,13 +706,14 @@ void handlePreset(){if(server.hasArg("index")){int i=server.arg("index").toInt()
 void handleCustomColor(){if(server.hasArg("r")&&server.hasArg("g")&&server.hasArg("b")){staticColor=CRGB(constrain(server.arg("r").toInt(),0,255),constrain(server.arg("g").toInt(),0,255),constrain(server.arg("b").toInt(),0,255));effectMode=4;saveSettings();}server.sendHeader("Location","/",true);server.send(302,"text/plain","");}
 void handleBrightness(){if(server.hasArg("value")){brightness=constrain(server.arg("value").toInt(),5,255);FastLED.setBrightness(brightness);saveSettings();}server.send(200,"text/plain","OK");}
 
+void handleSpeed(){if(server.hasArg("value")){scrollSpeed=constrain(server.arg("value").toInt(),50,400);saveSettings();}server.send(200,"text/plain","OK");}
+
 void handleText() {
   if(server.hasArg("scrollText")){
     String t=server.arg("scrollText"); t.trim();
     if(t.length()>255) t=t.substring(0,255);
     if(t.length()==0) t="HELLO";
     t.toCharArray(scrollText,256); textPosition=0;
-    if(server.hasArg("speed")) scrollSpeed=constrain(server.arg("speed").toInt(),50,400);
     parseScrollText(); saveSettings();
   }
   server.sendHeader("Location","/",true); server.send(302,"text/plain","");
@@ -751,6 +756,7 @@ void setupRoutes() {
   server.on("/preset",HTTP_GET,handlePreset);
   server.on("/custom",HTTP_POST,handleCustomColor);
   server.on("/brightness",HTTP_GET,handleBrightness);
+  server.on("/speed",HTTP_GET,handleSpeed);
   server.on("/text",HTTP_POST,handleText);
   server.on("/weather",HTTP_POST,handleWeatherCfg);
   server.on("/reset",HTTP_GET,handleReset);
